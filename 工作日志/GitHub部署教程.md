@@ -52,10 +52,10 @@
 cd "D:\task_file\windows\工时统计系统"
 
 # 关联远程仓库（替换用户名）
-git remote add origin https://github.com/<你的用户名>/worktrack.git
+git remote add origin https://github.com/dashboard/worktrack.git
 
-# 推送（替换用户名和令牌）
-git push -u https://<你的用户名>:<你的令牌>@github.com/<你的用户名>/worktrack.git main
+# 推送（把 ghp_你的令牌 换成你第 2 步复制的令牌）
+git push -u https://dashboard:ghp_你的令牌@github.com/dashboard/worktrack.git main
 ```
 
 > 说明：本地仓库我已经 `init` + `commit` 好了，所以直接 push 即可。上面第二条命令把令牌嵌在 URL 里，这样不会再弹窗要密码。
@@ -64,21 +64,21 @@ git push -u https://<你的用户名>:<你的令牌>@github.com/<你的用户名
 
 推送后可以删掉令牌痕迹（可选）：
 ```bash
-git remote set-url origin https://github.com/<你的用户名>/worktrack.git
+git remote set-url origin https://github.com/dashboard/worktrack.git
 ```
 
 ---
 
 ## 第 4 步：开启 GitHub Pages
 
-1. 回到仓库网页 https://github.com/<你的用户名>/worktrack
+1. 回到仓库网页 https://github.com/dashboard/worktrack
 2. 点顶部 **Settings** 标签
 3. 左侧菜单找 **Pages**
 4. **Source** 选 **Deploy from a branch**
 5. **Branch** 下拉选 `main`，右边文件夹选 `/root`，点 **Save**
 6. 等待 1～3 分钟，刷新该页面，顶部会出现绿色提示：
    ```
-   Your site is live at https://<你的用户名>.github.io/worktrack/
+   Your site is live at https://dashboard.github.io/worktrack/
    ```
 
 这就是你的**永久 HTTPS 链接**，以后随便分享。
@@ -89,7 +89,7 @@ git remote set-url origin https://github.com/<你的用户名>/worktrack.git
 
 1. 手机浏览器（推荐 Chrome）打开：
    ```
-   https://<你的用户名>.github.io/worktrack/
+   https://dashboard.github.io/worktrack/
    ```
 2. 菜单 → **添加到主屏幕** → 桌面生成图标
 3. 点开即用，离线可用，数据存手机本地

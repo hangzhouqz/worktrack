@@ -342,6 +342,25 @@
     $("#promptSheet").classList.remove("hidden");
   }
 
+  /* 一键复制昨日日程到当前日期（只读昨日、不改动昨日数据） */
+  function copyYesterday(targetDateStr) {
+    const prev = fmtDate(addDays(new Date(targetDateStr + "T00:00:00"), -1));
+    const src = getLogsByDate(prev);
+    if (src.length === 0) { toast("昨日无记录可复制"); return; }
+    src.forEach((l) => addLog({
+      date: targetDateStr,
+      project: l.project,
+      worktype: l.worktype,
+      start: l.start || "",
+      end: l.end || "",
+      duration: l.duration || 0,
+      note: l.note || "",
+    }));
+    renderDayLogs(targetDateStr);
+    renderCalendar();
+    toast(`已复制 ${src.length} 条到${formatChineseDate(targetDateStr)}`);
+  }
+
   /* ---------- 统计 ---------- */
   let statsRange = "week";
   function renderStats() {
@@ -513,6 +532,7 @@
     $("#dayClose").addEventListener("click", closeDaySheet);
     $("#dayBackdrop").addEventListener("click", closeDaySheet);
     $("#dayAddBtn").addEventListener("click", () => { if (dayCursor) openLogSheet(dayCursor); });
+    $("#dayCopyBtn").addEventListener("click", () => { if (dayCursor) copyYesterday(dayCursor); });
     /* 录入表单：取消 / 背景 关闭后回到日期详情 */
     $("#logCancel").addEventListener("click", closeLogForm);
     $("#logBackdrop").addEventListener("click", closeLogForm);

@@ -31,7 +31,7 @@
       <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
     </div>
     <div class="cal-grid" id="calGrid"></div>
-    <p class="cal-hint">点击日期记录工时 · 数字为当日合计</p>
+    <p class="cal-hint">点击日期查看与管理当日工时 · 数字为当日合计</p>
   </main>
 
   <main class="view hidden" id="viewStats" data-view="stats">
@@ -44,14 +44,23 @@
       <div class="metric"><span class="metric__label">记录天数</span><span class="metric__value" id="statDays">0</span></div>
       <div class="metric"><span class="metric__label">日均</span><span class="metric__value" id="statAvg">0</span></div>
     </div>
-    <div class="card">
-      <h2 class="card__title">按项目</h2>
-      <div class="barlist" id="byProject"></div>
-    </div>
-    <div class="card">
-      <h2 class="card__title">按工种</h2>
-      <div class="barlist" id="byWorktype"></div>
-    </div>
+    <section class="stats-section">
+      <div class="card stats-block">
+        <div class="card__row">
+          <h2 class="card__title">按项目</h2>
+          <span class="stats-block__hint" id="projCount"></span>
+        </div>
+        <div class="barlist" id="byProject"></div>
+      </div>
+      <div class="card stats-block">
+        <div class="card__row">
+          <h2 class="card__title">按工种</h2>
+          <span class="stats-block__hint" id="wtCount"></span>
+        </div>
+        <div class="barlist" id="byWorktype"></div>
+      </div>
+    </section>
+    <p class="cal-hint">项目与工种各自独立统计：多项目共用同一工种时，工种合计自动汇总，互不混淆。</p>
   </main>
 
   <main class="view hidden" id="viewSettings" data-view="settings">
@@ -101,7 +110,7 @@
   </nav>
 
   <div class="sheet hidden" id="sheet">
-    <div class="sheet__backdrop" data-close></div>
+    <div class="sheet__backdrop" id="logBackdrop"></div>
     <div class="sheet__panel">
       <div class="sheet__handle"></div>
       <form id="logForm" class="form" autocomplete="off">
@@ -146,7 +155,7 @@
         </div>
         <div class="form__actions">
           <button type="button" class="btn btn--ghost btn--danger" id="deleteLog" hidden>删除</button>
-          <button type="button" class="btn btn--ghost" data-close>取消</button>
+          <button type="button" class="btn btn--ghost" id="logCancel">取消</button>
           <button type="submit" class="btn btn--primary">保存</button>
         </div>
       </form>
@@ -169,6 +178,22 @@
           <button type="submit" class="btn btn--primary">确定</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div class="sheet hidden" id="daySheet">
+    <div class="sheet__backdrop" id="dayBackdrop"></div>
+    <div class="sheet__panel">
+      <div class="sheet__handle"></div>
+      <div class="day-head">
+        <div>
+          <div class="day-head__date" id="dayHeadDate">—</div>
+          <div class="day-head__sum" id="dayHeadSum">合计 0h</div>
+        </div>
+        <button class="icon-btn" id="dayClose" aria-label="关闭">✕</button>
+      </div>
+      <div class="day-list" id="dayLogList"></div>
+      <button class="btn btn--primary day-add" id="dayAddBtn">+ 新增工时</button>
     </div>
   </div>
 

@@ -94,6 +94,11 @@
     if (!n) return "0";
     return (Math.round(n * 100) / 100).toString();
   }
+  function formatChineseDate(ds) {
+    const [y, m, d] = ds.split("-").map(Number);
+    const wd = ["日", "一", "二", "三", "四", "五", "六"][new Date(y, m - 1, d).getDay()];
+    return `${y}年${m}月${d}日 周${wd}`;
+  }
 
   function toast(msg) {
     const t = $("#toast");
@@ -131,6 +136,8 @@
   /* ---------- 日历 ---------- */
   let calCursor = new Date();
   let dailyCache = {};
+  let dayCursor = null;     // 当前打开的日期详情
+  let returnToDay = false;  // 录入表单是否从日期详情打开，关闭后回到详情
 
   function loadMonthCache(year, month) {
     const first = new Date(year, month, 1);
@@ -169,7 +176,7 @@
       if (!sameMonth(date, calCursor)) c.classList.add("cal-cell--other");
       if (sum) c.classList.add("cal-cell--has");
       c.innerHTML = `<span class="cal-cell__date">${d}</span>${sum ? `<span class="cal-cell__sum">${fmtHours(sum)}h</span>` : ""}`;
-      c.addEventListener("click", () => openLogSheet(ds));
+      c.addEventListener("click", () => openDaySheet(ds));
       grid.appendChild(c);
     }
   }
@@ -203,6 +210,8 @@
   }
 
   function openLogSheet(dateStr, logId) {
+    returnToDay = true;
+    $("#daySheet").classList.add("hidden");
     const projects = getAll("projects");
     const worktypes = getAll("worktypes");
     fillSelect($("#logProject"), projects, true);
@@ -233,6 +242,90 @@
   }
 
   function closeSheet(id) { $(id).classList.add("hidden"); }
+
+  /* ---------- 日期详情（查看/增删改当日工时 + 备注） ---------- */
+  function openDaySheet(dateStr) {
+    dayCursor = dateStr;
+    returnToDay = false;
+    renderDayLogs(dateStr);
+    $("#daySheet").classList.remove("hidden");
+  }
+
+  function closeDaySheet() {
+    $("#daySheet").classList.add("hidden");
+    dayCursor = null;
+    returnToDay = false;
+  }
+
+  /* 关闭录入表单：若来自日期详情，刷新列表并回到详情 */
+  function closeLogForm() {
+    closeSheet("#sheet");
+    if (returnToDay && dayCursor) {
+      renderDayLogs(dayCursor);
+      $("#daySheet").classList.remove("hidden");
+    }
+  }
+
+  function renderDayLogs(dateStr) {
+    const logs = getLogsByDate(dateStr).slice().sort((a, b) => (a.start || "").localeCompare(b.start || ""));
+    const projects = getAll("projects");
+    const worktypes = getAll("worktypes");
+    const pn = (id) => (projects.find((p) => p.id === id) || {}).name || "未分类";
+    const wn = (id) => (worktypes.find((w) => w.id === id) || {}).name || "未分类";
+    $("#dayHeadDate").textContent = formatChineseDate(dateStr);
+    const total = logs.reduce((s, l) => s + (l.duration || 0), 0);
+    $("#dayHeadSum").textContent = `合计 ${fmtHours(total)}h`;
+    const list = $("#dayLogList");
+    list.innerHTML = "";
+    if (logs.length === 0) {
+      list.innerHTML = '<div class="day-empty">这一天还没有记录，点下面按钮添加</div>';
+      return;
+    }
+    logs.forEach((l) => {
+      const item = document.createElement("div");
+      item.className = "day-item";
+
+      const title = document.createElement("div");
+      title.className = "day-item__title";
+      title.textContent = `${pn(l.project)} · ${wn(l.worktype)}`;
+      item.appendChild(title);
+
+      const meta = document.createElement("div");
+      meta.className = "day-item__meta";
+      const time = l.start && l.end ? `${l.start}–${l.end} · ` : "";
+      meta.textContent = `${time}${fmtHours(l.duration)}h`;
+      item.appendChild(meta);
+
+      if (l.note) {
+        const note = document.createElement("div");
+        note.className = "day-item__note";
+        note.textContent = l.note; // textContent 防 XSS
+        item.appendChild(note);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "day-item__actions";
+      const edit = document.createElement("button");
+      edit.className = "day-item__edit";
+      edit.textContent = "编辑";
+      edit.addEventListener("click", () => openLogSheet(dateStr, l.id));
+      const del = document.createElement("button");
+      del.className = "day-item__del";
+      del.textContent = "删除";
+      del.addEventListener("click", () => {
+        if (!confirm("确认删除这条工时记录？")) return;
+        delLog(l.id);
+        toast("已删除");
+        renderDayLogs(dateStr);
+        renderCalendar();
+      });
+      actions.appendChild(edit);
+      actions.appendChild(del);
+      item.appendChild(actions);
+
+      list.appendChild(item);
+    });
+  }
 
   function openPrompt(label, cb) {
     $("#promptLabel").textContent = label;
@@ -274,6 +367,8 @@
     });
     renderBarList("#byProject", byP, total);
     renderBarList("#byWorktype", byW, total);
+    $("#projCount").textContent = `${Object.keys(byP).length} 个`;
+    $("#wtCount").textContent = `${Object.keys(byW).length} 个`;
   }
 
   function renderBarList(sel, map, total) {
@@ -393,16 +488,17 @@
         return;
       }
       toast(id ? "已更新" : "已保存");
-      closeSheet("#sheet");
+      closeLogForm();
       renderCalendar();
     });
 
     $("#deleteLog").addEventListener("click", () => {
       const id = Number($("#logId").value);
       if (!id) return;
+      if (!confirm("确认删除这条工时记录？")) return;
       delLog(id);
-      closeSheet("#sheet");
       toast("已删除");
+      closeLogForm();
       renderCalendar();
     });
 
@@ -412,6 +508,14 @@
       statsRange = b.dataset.range;
       renderStats();
     }));
+
+    /* 日期详情：关闭 / 新增 */
+    $("#dayClose").addEventListener("click", closeDaySheet);
+    $("#dayBackdrop").addEventListener("click", closeDaySheet);
+    $("#dayAddBtn").addEventListener("click", () => { if (dayCursor) openLogSheet(dayCursor); });
+    /* 录入表单：取消 / 背景 关闭后回到日期详情 */
+    $("#logCancel").addEventListener("click", closeLogForm);
+    $("#logBackdrop").addEventListener("click", closeLogForm);
 
     $("#addProject").addEventListener("click", () => {
       openPrompt("项目名称", (name) => {

@@ -513,6 +513,159 @@
     toast("已导出 CSV");
   }
 
+  /* ---------- CSV 导入 ---------- */
+  let pendingImport = null;   // 已解析、等待用户选择合并/覆盖的备份数据
+
+  /* 简易 CSV 解析：支持引号包裹、字段内逗号与转义双引号 */
+  function parseCSV(text) {
+    const rows = [];
+    let row = [], cur = "", inQ = false;
+    const s = String(text || "").replace(/^\uFEFF/, "");
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (inQ) {
+        if (ch === '"') {
+          if (s[i + 1] === '"') { cur += '"'; i++; }
+          else inQ = false;
+        } else cur += ch;
+        continue;
+      }
+      if (ch === '"') { inQ = true; continue; }
+      if (ch === ",") { row.push(cur); cur = ""; continue; }
+      if (ch === "\r") continue;
+      if (ch === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; continue; }
+      cur += ch;
+    }
+    row.push(cur); rows.push(row);
+    return rows.filter((r) => r.some((c) => String(c).trim() !== ""));
+  }
+
+  /* 按名字取条目 id，不存在则新建（不落盘，由调用方统一 saveData） */
+  function resolveName(store, name) {
+    const hit = (mem[store] || []).find((it) => it.name === name);
+    if (hit) return hit.id;
+    const obj = { id: nextId(), name, created_at: Date.now() };
+    mem[store].push(obj);
+    return obj.id;
+  }
+
+  /* 严格日期校验：拒绝 2026-13-99 这类格式对但不存在的日期 */
+  function isRealDate(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!m) return false;
+    const y = +m[1], mo = +m[2], d = +m[3];
+    const dt = new Date(y, mo - 1, d);
+    return dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d;
+  }
+
+  /* 解析备份文本 → { logs, skipped }，容错列数与表头 */
+  function parseImport(text) {
+    const rows = parseCSV(text);
+    if (rows.length === 0) return null;
+    let start = 0;
+    if (!isRealDate((rows[0][0] || "").trim())) start = 1; // 首行是表头则跳过
+    const logs = [];
+    let skipped = 0;
+    for (let i = start; i < rows.length; i++) {
+      const r = rows[i];
+      const date = (r[0] || "").trim();
+      if (!isRealDate(date)) { skipped++; continue; }
+      const dur = parseFloat((r[5] || "").trim());
+      if (isNaN(dur) || dur < 0) { skipped++; continue; }
+      logs.push({
+        date,
+        projectName: (r[1] || "").trim(),
+        worktypeName: (r[2] || "").trim(),
+        start: (r[3] || "").trim(),
+        end: (r[4] || "").trim(),
+        duration: dur,
+        note: (r[6] || "").trim(),
+      });
+    }
+    return { logs, skipped };
+  }
+
+  function handleImportFile(file) {
+    const reader = new FileReader();
+    reader.onerror = () => toast("读取文件失败");
+    reader.onload = () => {
+      const parsed = parseImport(reader.result);
+      if (!parsed || parsed.logs.length === 0) {
+        toast("未识别到有效记录，请用本程序导出的 CSV");
+        return;
+      }
+      pendingImport = parsed;
+      $("#importSummary").textContent =
+        `识别到 ${parsed.logs.length} 条记录` + (parsed.skipped ? ` · 跳过 ${parsed.skipped} 行` : "");
+      $("#importSheet").classList.remove("hidden");
+    };
+    reader.readAsText(file, "utf-8");
+  }
+
+  function closeImportSheet() {
+    $("#importSheet").classList.add("hidden");
+    pendingImport = null;
+  }
+
+  const DUP_SEP = "\u0001";
+  function logKey(d, p, w, s, e, dur, note) {
+    return [d, p, w, s, e, dur, note].join(DUP_SEP);
+  }
+
+  /* 真正写入：mode = merge（追加+去重）| replace（先清空） */
+  function applyImport(mode) {
+    const data = pendingImport;
+    if (!data || !data.logs.length) return;
+    if (mode === "replace" && !confirm("覆盖导入会先清空现有全部工时记录，确认继续？")) return;
+
+    const seen = new Set();
+    if (mode === "merge") {
+      const projects = getAll("projects"), worktypes = getAll("worktypes");
+      const pn = (id) => (projects.find((p) => p.id === id) || {}).name || "";
+      const wn = (id) => (worktypes.find((w) => w.id === id) || {}).name || "";
+      mem.worklogs.forEach((l) => seen.add(logKey(l.date, pn(l.project), wn(l.worktype), l.start || "", l.end || "", l.duration, l.note || "")));
+    }
+
+    const incoming = data.logs.map((l) => ({
+      date: l.date,
+      project: l.projectName ? resolveName("projects", l.projectName) : null,
+      worktype: l.worktypeName ? resolveName("worktypes", l.worktypeName) : null,
+      start: l.start,
+      end: l.end,
+      duration: l.duration,
+      note: l.note,
+    }));
+
+    if (mode === "replace") mem.worklogs = [];
+    let added = 0, dup = 0;
+    incoming.forEach((l, i) => {
+      if (mode === "merge") {
+        const src = data.logs[i];
+        const key = logKey(src.date, src.projectName, src.worktypeName, src.start, src.end, src.duration, src.note);
+        if (seen.has(key)) { dup++; return; }
+        seen.add(key);
+      }
+      l.id = nextId();
+      l.created_at = Date.now();
+      mem.worklogs.push(l);
+      added++;
+    });
+
+    if (!saveData()) {
+      toast("导入失败：浏览器拒绝写入本地存储");
+      closeImportSheet();
+      return;
+    }
+    loadData();               // 回读，确保界面与磁盘一致
+    statsMonthInited = false; // 让「往月」重新按新数据定位
+    renderCalendar();
+    if (!$("#viewStats").classList.contains("hidden")) renderStats();
+    toast(mode === "replace"
+      ? `已覆盖导入 ${added} 条`
+      : `已导入 ${added} 条` + (dup ? ` · 跳过重复 ${dup} 条` : ""));
+    closeImportSheet();
+  }
+
   /* ---------- 事件绑定 ---------- */
   function bind() {
     $$(".tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
@@ -613,6 +766,19 @@
     });
 
     $("#exportCsv").addEventListener("click", exportCSV);
+
+    /* 导入 CSV 备份 */
+    $("#importCsv").addEventListener("click", () => $("#importFile").click());
+    $("#importFile").addEventListener("change", (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = "";               // 允许连续选同一个文件
+      if (f) handleImportFile(f);
+    });
+    $("#importMerge").addEventListener("click", () => applyImport("merge"));
+    $("#importReplace").addEventListener("click", () => applyImport("replace"));
+    $("#importCancel").addEventListener("click", closeImportSheet);
+    $("#importClose").addEventListener("click", closeImportSheet);
+    $("#importBackdrop").addEventListener("click", closeImportSheet);
     $("#clearData").addEventListener("click", () => {
       if (!confirm("确认清空所有工时记录？此操作不可撤销。")) return;
       mem.worklogs = [];

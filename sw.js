@@ -1,5 +1,5 @@
 /* Service Worker · 离线缓存 */
-const CACHE = "wt-v5";
+const CACHE = "wt-v6";
 const ASSETS = [
   "./",
   "./index.html",

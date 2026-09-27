@@ -35,10 +35,18 @@
   </main>
 
   <main class="view hidden" id="viewStats" data-view="stats">
-    <div class="seg" id="statsRange">
+    <div class="seg seg--full" id="statsRange">
       <button class="seg__btn active" data-range="week">本周</button>
       <button class="seg__btn" data-range="month">本月</button>
+      <button class="seg__btn" data-range="custom">往月</button>
     </div>
+    <div class="cal-nav hidden" id="statMonthNav">
+      <button class="icon-btn" id="statPrevMonth" aria-label="上个月">‹</button>
+      <div class="cal-nav__label" id="statMonthLabel">—</div>
+      <button class="icon-btn" id="statNextMonth" aria-label="下个月">›</button>
+      <button class="chip-btn" id="statThisMonth">回本月</button>
+    </div>
+    <p class="stat-range-hint hidden" id="statRangeHint"></p>
     <div class="metric-row" id="statsSummary">
       <div class="metric"><span class="metric__label">总工时</span><span class="metric__value" id="statTotal">0</span></div>
       <div class="metric"><span class="metric__label">记录天数</span><span class="metric__value" id="statDays">0</span></div>
@@ -60,7 +68,7 @@
         <div class="barlist" id="byWorktype"></div>
       </div>
     </section>
-    <p class="cal-hint">项目与工种各自独立统计：多项目共用同一工种时，工种合计自动汇总，互不混淆。</p>
+    <p class="cal-hint">项目与工种各自独立统计：多项目共用同一工种时，工种合计自动汇总，互不混淆。<br />选「往月」可翻看历史任意月份的统计，不影响已有工时数据。</p>
   </main>
 
   <main class="view hidden" id="viewSettings" data-view="settings">

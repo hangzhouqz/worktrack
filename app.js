@@ -362,13 +362,63 @@
   }
 
   /* ---------- 统计 ---------- */
-  let statsRange = "week";
-  function renderStats() {
+  let statsRange = "week";                    // week | month | custom（往月）
+  let statsMonth = new Date();                // 「往月」当前查看的月份
+  let statsMonthInited = false;               // 是否已按历史数据定位过初始月份
+
+  /* 取当前统计口径的日期区间 [startStr, endStr] */
+  function statsRangeDates() {
     const now = new Date();
-    let start, end;
-    if (statsRange === "week") { start = startOfWeek(now); end = addDays(start, 7); }
-    else { start = new Date(now.getFullYear(), now.getMonth(), 1); end = new Date(now.getFullYear(), now.getMonth() + 1, 1); }
-    const logs = getLogsInRange(fmtDate(start), fmtDate(addDays(end, -1)));
+    if (statsRange === "week") {
+      const s = startOfWeek(now);
+      return [fmtDate(s), fmtDate(addDays(s, 6))];
+    }
+    const y = statsRange === "month" ? now.getFullYear() : statsMonth.getFullYear();
+    const m = statsRange === "month" ? now.getMonth() : statsMonth.getMonth();
+    return [fmtDate(new Date(y, m, 1)), fmtDate(new Date(y, m + 1, 0))];
+  }
+
+  /* 「往月」：翻到有记录的最近一个历史月份（没有就回退到上月） */
+  function initStatsMonth() {
+    const now = new Date();
+    const curKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+    const keys = [...new Set(getAll("worklogs").map((l) => String(l.date || "").slice(0, 7)))]
+      .filter((k) => /^\d{4}-\d{2}$/.test(k) && k < curKey)
+      .sort();
+    if (keys.length) {
+      const last = keys[keys.length - 1].split("-").map(Number);
+      statsMonth = new Date(last[0], last[1] - 1, 1);
+    } else {
+      statsMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    }
+  }
+
+  function shiftStatsMonth(n) {
+    const y = statsMonth.getFullYear(), m = statsMonth.getMonth() + n;
+    statsMonth = new Date(y, m, 1);
+    const now = new Date();
+    const cap = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (statsMonth > cap) statsMonth = cap;   // 不允许翻到未来月份
+    renderStats();
+  }
+
+  function renderStatsNav() {
+    const isCustom = statsRange === "custom";
+    $("#statMonthNav").classList.toggle("hidden", !isCustom);
+    if (!isCustom) { $("#statRangeHint").classList.add("hidden"); return; }
+    $("#statMonthLabel").textContent = `${statsMonth.getFullYear()}年${statsMonth.getMonth() + 1}月`;
+    const now = new Date();
+    const cap = new Date(now.getFullYear(), now.getMonth(), 1);
+    $("#statNextMonth").disabled = statsMonth >= cap;
+    const [s, e] = statsRangeDates();
+    $("#statRangeHint").textContent = `统计区间 ${s} 至 ${e}`;
+    $("#statRangeHint").classList.remove("hidden");
+  }
+
+  function renderStats() {
+    const [startStr, endStr] = statsRangeDates();
+    renderStatsNav();
+    const logs = getLogsInRange(startStr, endStr);
     const total = logs.reduce((s, l) => s + (l.duration || 0), 0);
     const daysSet = new Set(logs.map((l) => l.date));
     $("#statTotal").textContent = fmtHours(total) + "h";
@@ -525,8 +575,18 @@
       $$("#statsRange .seg__btn").forEach((x) => x.classList.remove("active"));
       b.classList.add("active");
       statsRange = b.dataset.range;
+      if (statsRange === "custom" && !statsMonthInited) { initStatsMonth(); statsMonthInited = true; }
       renderStats();
     }));
+
+    /* 往月：上/下月翻页 + 回本月 */
+    $("#statPrevMonth").addEventListener("click", () => shiftStatsMonth(-1));
+    $("#statNextMonth").addEventListener("click", () => shiftStatsMonth(1));
+    $("#statThisMonth").addEventListener("click", () => {
+      const now = new Date();
+      statsMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      renderStats();
+    });
 
     /* 日期详情：关闭 / 新增 */
     $("#dayClose").addEventListener("click", closeDaySheet);
